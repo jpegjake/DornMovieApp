@@ -12,10 +12,9 @@ using System.Threading.Tasks;
 namespace DornMovieApp
 {
     /// <summary>
-    /// Intermediate Job Table
+    /// This is a JSON and file based DB class
     /// Supply a file path to load from and save to
-    /// Table structure can contain JToken's or any other value
-    /// 
+    /// Table structure can contain JToken's or any string values
     /// </summary>
     public class JSONDB : IDisposable
     {
@@ -106,26 +105,6 @@ namespace DornMovieApp
                 throw new Exception("Cannot SaveSection using an Null or Whitespace string.");
         }
 
-        //public void RemoveSection(string name)
-        //{
-        //    if (!string.IsNullOrWhiteSpace(name) && datatable != null && datatable[name] != null)
-        //    {
-        //        try
-        //        {
-        //            datatable[name].Remove();
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            JObject temObject = new JObject();
-        //            foreach (var item in datatable)
-        //            {
-        //                if (item.Key != "UploadData")
-        //                    temObject[item.Key] = item.Value;
-        //            }
-        //            datatable = temObject;
-        //        }
-        //    }
-        //}
         private bool _readonly;
         /// <summary>
         /// Load from json string in file
@@ -162,9 +141,9 @@ namespace DornMovieApp
         }
 
         /// <summary>
-        /// Create a lock file
+        /// Try to create a lock file or wait for access to be granted when the previous user is done.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>boolean result of whether the database was successfully locked</returns>
         /// 
         Mutex mutex = new Mutex(false, "DBlock");
         private bool TryLock()
@@ -182,6 +161,9 @@ namespace DornMovieApp
             return IsLocked;
         }
 
+        /// <summary>
+        /// Unlock the database
+        /// </summary>
         public void UnLock()
         {
             lockfile?.Close();
@@ -192,6 +174,9 @@ namespace DornMovieApp
             catch { }
         }
 
+        /// <summary>
+        /// Detect outside locked database
+        /// </summary>
         public bool IsLockedOutside
         {
             get

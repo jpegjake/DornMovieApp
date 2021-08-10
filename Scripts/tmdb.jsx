@@ -1,4 +1,6 @@
-﻿async function getData(url = '', headers = { 'Content-Type': 'application/json' /*,'Content-Type': 'application/x-www-form-urlencoded'*/ }, responseType='json') {
+﻿
+//get data from a web resource/api
+async function getData(url = '', headers = { 'Content-Type': 'application/json' /*,'Content-Type': 'application/x-www-form-urlencoded'*/ }, responseType = 'json') {
     // Default options are marked with *
     const response = await fetch(url, {
         method: 'GET', // *GET, POST, PUT, DELETE, etc.
@@ -16,6 +18,7 @@
     return response.json(); 
 }
 
+//convert arrayBuffer to base64
 function _arrayBufferToBase64(buffer) {
     var binary = '';
     var bytes = new Uint8Array(buffer);
@@ -28,7 +31,7 @@ function _arrayBufferToBase64(buffer) {
 
 api_key = "37e0222683173a81e04881c588f4951c";
 base_url = "https://api.themoviedb.org/3";
-image_url = "https://image.tmdb.org/t/p/w500";
+image_url = "https://image.tmdb.org";
 
 class MovieForm extends React.Component {
     constructor(props) {
@@ -56,7 +59,7 @@ class MovieForm extends React.Component {
         this.reset = this.reset.bind(this);
         this.fileLoaded = this.fileLoaded.bind(this);
     }
-
+    //reset click handler
     reset(event) {
         this.setState({
             selected: null,
@@ -73,6 +76,7 @@ class MovieForm extends React.Component {
         this.setFile(null, null);
     }
 
+    //handle change to the file upload user control, populate the image from the file
     fileLoaded(event) {        
         var urlCreator = window.URL || window.webkitURL;
         var imageUrl = urlCreator.createObjectURL(event.target.files[0]);
@@ -80,6 +84,7 @@ class MovieForm extends React.Component {
         this.setState(this.state);
     }
 
+    //populate the file input with the image data from TMDB api 
     setFile(blob, file_name) {
         let fileInputElement = document.getElementById('image_file');
         let container = new DataTransfer();
@@ -92,13 +97,14 @@ class MovieForm extends React.Component {
 
         fileInputElement.files = container.files;    
     }
-
+    //update the description
     handleDescChange(event) {
         if (this.state.formcontent.desc == event.target.value)
             return;
         this.state.formcontent.desc = event.target.value;
         this.setState(this.state);
     }
+    //update the name
     handleNameChange(event) {
         if (this.state.formcontent.name == event.target.value && !this.state.isLoaded)
             return;
@@ -106,17 +112,13 @@ class MovieForm extends React.Component {
         this.state.isLoaded = false;
         this.setState(this.state);
     }    
-
+    //update the selected item in the TMDB search results
     handleChange(event) {
         this.state.selected = event.target.value;
     }    
 
+    //Search the TMDB api for the name of the movie on the user form
     searchTMDB(event) {
-        if (this.state.formcontent.name == '') {
-            console.log("No name value to search with.")
-            return;
-        }
-
         try {
             getData(base_url + "/search/movie" + "?api_key=" + api_key + "&query=" + document.getElementById('name').value)
                 .then(
@@ -158,6 +160,7 @@ class MovieForm extends React.Component {
         }
     }
 
+    //Populate the form with data from TMDB api
     populateSelect(event) {
         try {
             getData(base_url + "/movie/" + this.state.selected + "?api_key=" + api_key)
@@ -170,7 +173,7 @@ class MovieForm extends React.Component {
                             else
                                 this.state.formcontent.desc = "No overview provided.";
 
-                            getData(image_url + "/t/p/w300" + result.poster_path, {}, 'blob')
+                            getData(image_url + "/t/p/w500" + result.poster_path, {}, 'blob')
                                 .then(
 
                                     (result2) => {
@@ -201,9 +204,8 @@ class MovieForm extends React.Component {
             console.log(e);
         }
     }
-
-    
-
+        
+    //Render the movie form and the TMDB user controls
     render() {
         return (
             <div>
