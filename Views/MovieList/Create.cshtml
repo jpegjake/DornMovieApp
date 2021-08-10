@@ -1,0 +1,34 @@
+﻿@model DornMovieApp.Models.Movie
+
+@{
+    ViewBag.Title = "Add Movie";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<div class="form-horizontal">
+    <hr />
+    @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+    <div class="form-group col-md-offset-1">
+        @using (Html.BeginForm("Create", "MovieList", FormMethod.Post, new { enctype = "multipart/form-data" }))
+        {
+            @Html.AntiForgeryToken()
+            <input type="hidden" id="orig_name" value="" />
+            <input type="hidden" id="orig_image" value="" />
+            <input type="hidden" id="orig_desc" value="" />
+
+            <div id="react_form">
+
+            </div>
+        }
+
+    </div>
+</div>
+
+<div>
+    @Html.ActionLink("Back to List", "Index")
+</div>
+
+@section Scripts {
+    @Scripts.Render("~/bundles/jqueryval")
+}
+
+<script src="@Url.Content("~/Scripts/tmdb.jsx")"></script>

@@ -1,0 +1,20 @@
+﻿@model DornMovieApp.Models.Movie
+
+@{
+    ViewBag.Title = "Delete \"" + Model.Name + "\"?";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div>
+
+    @using (Html.BeginForm())
+    {
+        @Html.AntiForgeryToken()
+        <img alt="@Model.Name" style="max-height: 150px" src="data:image/png;base64,@Model.Image" />
+        <h3>Are you sure you want to delete @Model.Name?</h3>
+        <div class="form-actions no-color">
+            <input type="submit" value="Delete" class="btn btn-default" /> |
+            @Html.ActionLink("Back to List", "Index")
+        </div>
+    }
+</div>

@@ -1,0 +1,74 @@
+﻿@model DornMovieApp.Models.MovieList
+
+@{
+    ViewBag.Title = "Movie Listing";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<p>
+    @Html.ActionLink("Add New Movie", "Create")
+</p>
+@using (Html.BeginForm("Index", "MovieList", FormMethod.Post, new { @class = "form-inline" }))
+{
+    <div class="form-group">
+        Search:
+        <input type="text" class="form-control" name="search_text" id="search_text" value="@Model.search_key" />
+    </div>
+
+    <div class="form-group">
+        Sort:
+        <select name="sort_type" class="form-control" id="sort_type">
+            <option></option>
+            @foreach (var item in Model.Movies.GetType().GenericTypeArguments.FirstOrDefault()?
+.GetFields()
+.Select(x => x.Name)
+.Where(x => x != "key") ?? new List<string>()
+)
+            {
+                <option @Html.Raw((Model.sort_type == item) ? "selected" : "")>@item</option>
+            }
+        </select>
+    </div>
+
+    <button class="btn btn-default" type="submit">Update</button>
+}
+<div>
+    <div>
+        @foreach (var item in Model.Movies)
+        {
+            <div class="col-xs-12 col-md-5 col-lg-4" style="margin: 15px 0;">
+                <div class="col-xs-4" style="padding: 0 !important">
+                    <a href="@Url.Action("Details", new { id = item.key })" title="Inspect" class="links">
+                        <img class="img-responsive" style="max-height: 225px;" alt="@item.Name" src="data:image/png;base64,@item.Image" />
+                    </a>
+                </div>
+                <div class="col-xs-8">
+                    <i><p>@item.Name</p></i>
+                    <div class="movie-description">@item.Description</div>
+                    <p>
+                        @Html.ActionLink(" ", "Details", new { id = item.key }, new { @class = "col-xs-3 bi bi-arrows-angle-expand h1", title = "Inspect" })
+                        @Html.ActionLink(" ", "Edit", new { id = item.key }, new { @class = "col-xs-3 bi bi-controller h1", title = "Edit" })
+                        @Html.ActionLink(" ", "Delete", new { id = item.key }, new { @class = "col-xs-3 bi bi-wind h1", title = "Delete" })
+                    </p>
+                </div>
+
+            </div>
+        }
+        <div id="AddMovie" class="col-xs-12 col-md-5 col-lg-4" style="margin: 15px 0;">
+            <div class="col-xs-4" style="padding: 0 !important">
+                <img class="img-responsive" style="margin: 0px -20px -200px 0px;" height="405" width="180" src="~/Content/Blank-document.svg" />
+            </div>
+            <div class="col-xs-8">
+
+                <br />
+                <br />
+                <br />
+                <p>
+                    @Html.ActionLink("Add Movie ", "Create", null, new { @class = "bi bi-plus", style = "font-size: 3rem", title = "Add Movie" })
+                </p>
+
+            </div>
+
+        </div>
+    </div>
+</div>
