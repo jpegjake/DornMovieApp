@@ -34,6 +34,9 @@
     <div class="col-xs-12 col-sm-offset-1 col-sm-10 body-content">
         <h2>@ViewBag.Title</h2>
         <div class="col-xs-12">
+
+            @Html.ValidationMessage("general", new { @class = "text-danger" })
+
             @RenderBody()
         </div>
         <div class="col-xs-12">

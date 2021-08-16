@@ -14,73 +14,88 @@ namespace DornMovieApp.Controllers
 {
     public class MovieListController : Controller
     {
-        static private JSONDB db;
-        static private JArray table;
+        private DornMovieDBModel movieDB;
+        private IEnumerable<Movie> movies_table;
+        //private JArray table;
 
         protected override void Initialize(RequestContext requestContext)
-        {
+        {            
             base.Initialize(requestContext);
-            if (db == null)
-                db = new JSONDB(Path.Combine(requestContext.HttpContext.Server.MapPath("~"), "DB\\database.json"));
+            movieDB = DornMovieDBModel.GetInstance(Path.Combine(requestContext.HttpContext.Server.MapPath("~"), "DB\\database.json"));
 
-            //Load table
-            if (table == null)
+            try
             {
-                LoadTable(true);
+                //Load table
+                movies_table = movieDB.Movies.LoadTable();
             }
-        }
-
-        private void Wait(int interval, int max)
-        {
-            max = max / interval;
-            int count = 0;
-            while ((db.IsLocked || db.IsLockedOutside) && count++ < max)
+            catch (JSONDB.JSONDBException e)
             {
-                Thread.Sleep(interval);
+                ModelState.AddModelError("general", "Database deadlock timeout error. Please try again.");
+                throw;
             }
-                
-        }
-
-        private void LoadTable(bool _readonly = false)
-        {
-            if (!db.Load(_readonly)) throw new Exception();// Error reading/parsing the json db!
-            table = (JArray)db.GetSection("Movies");
-            if (table == null)
+            catch (Exception e)
             {
-                table = new JArray();
-                db.SaveSection("Movies", table);
+                ModelState.AddModelError("general", "Unknown database error occurred.");
+                throw;
             }
         }
 
         // POST or GET: MovieList()
         public ActionResult Index(FormCollection collection)
-        {
-            LoadTable(true);
+        {            
+            var moviesList = new MovieList();
             var search = collection?["search_text"]?.ToLowerInvariant() ?? "";
             var sort = collection?["sort_type"] ?? "";
 
-            return View( new MovieList() { search_key = search, sort_type = sort, 
-                    Movies = table
-                    .Select(row => (Movie)row.ToObject(typeof(Movie)))
-                    .Where(x => x.GetType().GetFields().Any(y => x.GetType().GetField(y.Name).GetValue(x)?.ToString().ToLowerInvariant().Contains(search) ?? false))
-                    .OrderByDescending(x => {
-                        return x.GetType().GetField(sort)?.GetValue(x);
-                    })}
-                );
+            moviesList.search_key = search;
+            moviesList.sort_type = sort;
+            moviesList.Movies = new List<Movie>();
+
+            if (ModelState.IsValidField("general"))
+            {
+                try
+                {
+                    moviesList.Movies = movies_table?
+                            .Where(x => x.GetType().GetFields().Any(y => x.GetType().GetField(y.Name).GetValue(x)?.ToString().ToLowerInvariant().Contains(search) ?? false))
+                            .OrderByDescending(x =>
+                            {
+                                return x.GetType().GetField(sort)?.GetValue(x);
+                            });
+
+                    if (moviesList.Movies == null)
+                        moviesList.Movies = new List<Movie>();
+
+                }
+                catch (Exception e)
+                {
+                    ModelState.AddModelError("general", "Unknown database error occurred.");
+                }
+            }
+            return View(moviesList);
         }
 
         // GET: MovieList/Details/5
         public ActionResult Details(int? id)
         {
             if (id == null)
+            {
+                ModelState.AddModelError("general", "Movie key not found!");
                 return RedirectToAction("Index");
+            }
 
-            JToken obj = table.SingleOrDefault(row => (int)row["key"] == id);
+            if (!ModelState.IsValidField("general"))
+            {
+                return View(id);
+            }
+            Movie obj = movieDB.Movies.Table.SingleOrDefault(row => row.key == id);
 
             if (obj == null)
+            {
+                ModelState.AddModelError("general", "Movie key not found!");
                 return RedirectToAction("Index");
+            }
 
-            return View(obj.ToObject(typeof(Movie)));
+            return View(obj);
         }
 
         // GET: MovieList/Create
@@ -95,27 +110,27 @@ namespace DornMovieApp.Controllers
         {
             try
             {
-                LoadTable();
-
-                int last_key = table.Select(row => (int?)row["key"])?.Max() ?? 0;
-
-                JObject newrow = new JObject();
-                newrow.Add("key", last_key + 1);
-                newrow.Add("Name", collection["Name"]);
-                newrow.Add("Description", collection["Description"]);
+                Movie newrow = new Movie() {
+                    Name= collection["Name"],
+                    Description= collection["Description"]};
 
                 byte[] image = new byte[image_file.InputStream.Length];
                 image_file.InputStream.Read(image, 0, (int)image_file.InputStream.Length);
-                newrow.Add("Image", Convert.ToBase64String(image));
+                newrow.Image = Convert.ToBase64String(image);
 
-                table.Add(newrow);
-                db.SaveSection("Movies", table);
-                db.Save(true);
+                movieDB.Movies.Add<Movie>(newrow,"key");
+                movieDB.Commit();
 
                 return RedirectToAction("Index");
             }
-            catch
+            catch (JSONDB.JSONDBException e)
             {
+                ModelState.AddModelError("general", "Database deadlock timeout error. Please try again.");
+                return View();
+            }
+            catch (Exception e)
+            {
+                ModelState.AddModelError("general", "Unknown database error occurred.");
                 return View();
             }
         }
@@ -124,14 +139,24 @@ namespace DornMovieApp.Controllers
         public ActionResult Edit(int? id)
         {
             if (id == null)
+            {
+                ModelState.AddModelError("general", "Movie key not found!");
                 return RedirectToAction("Index");
+            }
 
-            JToken obj = table.SingleOrDefault(row => (int)row["key"] == id);
+            if (!ModelState.IsValidField("general"))
+            {
+                return View(id);
+            }
+            Movie obj = movies_table.SingleOrDefault(row => row.key == id);
 
             if (obj == null)
+            {
+                ModelState.AddModelError("general", "Movie key not found!");
                 return RedirectToAction("Index");
+            }
 
-            return View(obj.ToObject(typeof(Movie)));
+            return View(obj);
         }
 
         // POST: MovieList/Edit/5
@@ -139,27 +164,30 @@ namespace DornMovieApp.Controllers
         public ActionResult Edit(int id, FormCollection collection, HttpPostedFileBase image_file)
         {
             try
-            {
-                LoadTable();
-
-                JToken obj = table.Single(row => (int)row["key"] == id);
-                obj["Name"] = collection["Name"];
-                obj["Description"] = collection["Description"];
+            {                Movie obj = movieDB.Movies.Table.Single(row => row.key == id);
+                obj.Name = collection["Name"];
+                obj.Description = collection["Description"];
 
                 if (image_file != null)
                 {
                     byte[] image = new byte[image_file.InputStream.Length];
                     image_file.InputStream.Read(image, 0, (int)image_file.InputStream.Length);
-                    obj["Image"] = Convert.ToBase64String(image);
+                    obj.Image = Convert.ToBase64String(image);
                 }
 
-                db.SaveSection("Movies", table);
-                db.Save(true);
+                movieDB.Movies.Edit("key", obj);
+                movieDB.Commit();
 
                 return RedirectToAction("Index");
             }
-            catch
+            catch (JSONDB.JSONDBException e)
             {
+                ModelState.AddModelError("general", "Database deadlock timeout error. Please try again.");
+                return View();
+            }
+            catch (Exception e)
+            {
+                ModelState.AddModelError("general", "Unknown database error occurred.");
                 return View();
             }
         }
@@ -168,14 +196,24 @@ namespace DornMovieApp.Controllers
         public ActionResult Delete(int? id)
         {
             if (id == null)
+            {
+                ModelState.AddModelError("general", "Movie key not found!");
                 return RedirectToAction("Index");
+            }
 
-            JToken obj = table.SingleOrDefault(row => (int)row["key"] == id);
+            if (!ModelState.IsValidField("general"))
+            {
+                return View(id);
+            }
+            Movie obj = movies_table.SingleOrDefault(row => row.key == id);
 
             if (obj == null)
+            {
+                ModelState.AddModelError("general", "Movie key not found!");
                 return RedirectToAction("Index");
+            }
 
-            return View(obj.ToObject(typeof(Movie)));
+            return View(obj);
         }
 
         // POST: MovieList/Delete/5
@@ -184,17 +222,20 @@ namespace DornMovieApp.Controllers
         {
             try
             {
-                LoadTable();
+                movieDB.Movies.Delete("key",movies_table.Single(row => row.key == id));
 
-                table.Single(row => (int)row["key"] == id).Remove();
-
-                db.SaveSection("Movies", table);
-                db.Save(true);
+                movieDB.Commit();
 
                 return RedirectToAction("Index");
             }
-            catch
+            catch (JSONDB.JSONDBException e)
             {
+                ModelState.AddModelError("general", e.Message);
+                return View();
+            }
+            catch (Exception e)
+            {
+                ModelState.AddModelError("general", "Unknown database error occurred.");
                 return View();
             }
         }

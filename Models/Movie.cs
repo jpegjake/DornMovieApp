@@ -11,5 +11,6 @@ namespace DornMovieApp.Models
         public string Description;
         public string Name;
         public string Image;
+        
     }
 }
