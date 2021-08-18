@@ -199,7 +199,10 @@
     <Content Include="Scripts\jquery.validate.unobtrusive.js" />
     <Content Include="Scripts\jquery.validate.unobtrusive.min.js" />
     <Content Include="Scripts\modernizr-2.8.3.js" />
-    <Content Include="Scripts\tmdb.jsx" />
+    <Content Include="Scripts\Components\movieinput.jsx" />
+    <Content Include="Scripts\Components\MovieForm.jsx" />
+    <Content Include="Scripts\Components\tmdb.jsx" />
+    <Content Include="Scripts\MovieForm.js" />
     <Content Include="Web.config" />
     <Content Include="Web.Debug.config">
       <DependentUpon>Web.config</DependentUpon>
