@@ -80,13 +80,29 @@ namespace DornMovieApp
 
         public IEnumerable<TEntity> LoadTable(bool lockDB = false)
         {
-            table = this.SelectAll(lockDB);
+            table = SelectAll(lockDB);
+            return table;
+        }
+
+        public async Task<IEnumerable<TEntity>> LoadTableAsync(bool lockDB = false)
+        {
+            await SelectAllAsync(lockDB).ContinueWith((task) =>
+            {
+                table = task.Result;
+            });
             return table;
         }
 
         private List<TEntity> SelectAll(bool lockDB)
         {
             return LoadTableJson(lockDB).Select(row => (TEntity)row.ToObject(typeof(TEntity))).ToList();
+        }
+
+        private async Task<List<TEntity>> SelectAllAsync(bool lockDB)
+        {
+            return await LoadTableJsonAsync(lockDB).ContinueWith((task) => {
+                return task.Result.Select(row => (TEntity)row.ToObject(typeof(TEntity))).ToList();
+            });
         }
 
         public JArray LoadTableJson(bool lockDB = false)
@@ -99,6 +115,12 @@ namespace DornMovieApp
                 db.SaveSection(_tableName, table);
             }
             return table;
+        }
+
+        public async Task<JArray> LoadTableJsonAsync(bool lockDB = false)
+        {
+            var task = Task.Run(() => LoadTableJson(lockDB));
+            return await task;
         }
 
         public void Edit(string keyFieldName, TEntity objToEdit)

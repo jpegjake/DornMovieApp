@@ -6,27 +6,32 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Web;
+using System.Web.Hosting;
 using System.Web.Mvc;
 using System.Web.Routing;
 
 namespace DornMovieApp.Controllers
 {
-    public class MovieListController : Controller
+    public class MovieListController : AsyncController
     {
         private DornMovieDBModel movieDB;
         private IEnumerable<Movie> movies_table;
         //private JArray table;
+        private Task init;
+        private Task<ActionResult> req;
 
-        protected override void Initialize(RequestContext requestContext)
-        {            
-            base.Initialize(requestContext);
-            movieDB = DornMovieDBModel.GetInstance(Path.Combine(requestContext.HttpContext.Server.MapPath("~"), "DB\\database.json"));
-
+        public MovieListController() : base()
+        {
             try
-            {
-                //Load table
-                movies_table = movieDB.Movies.LoadTable();
+            { 
+                movieDB = DornMovieDBModel.GetInstance(Path.Combine(HostingEnvironment.MapPath("~"), "DB\\database.json"));
+                init = Task.Run(() => movieDB.Movies.LoadTableAsync()).ContinueWith((task) =>
+                {
+                    movies_table = task.Result;
+                });
+
             }
             catch (JSONDB.JSONDBException e)
             {
@@ -40,204 +45,245 @@ namespace DornMovieApp.Controllers
             }
         }
 
+
         // POST or GET: MovieList()
-        public ActionResult Index(FormCollection collection)
-        {            
-            var moviesList = new MovieList();
-            var search = collection?["search_text"]?.ToLowerInvariant() ?? "";
-            var sort = collection?["sort_type"] ?? "";
-
-            moviesList.search_key = search;
-            moviesList.sort_type = sort;
-            moviesList.Movies = new List<Movie>();
-
-            if (ModelState.IsValidField("general"))
+        public async Task<ActionResult> Index(FormCollection collection)
+        {
+            return await Task.Run(() =>
             {
-                try
-                {
-                    moviesList.Movies = movies_table?
-                            .Where(x => x.GetType().GetFields().Any(y => x.GetType().GetField(y.Name).GetValue(x)?.ToString().ToLowerInvariant().Contains(search) ?? false))
-                            .OrderByDescending(x =>
-                            {
-                                return x.GetType().GetField(sort)?.GetValue(x);
-                            });
+                var moviesList = new MovieList();
+                var search = collection?["search_text"]?.ToLowerInvariant() ?? "";
+                var sort = collection?["sort_type"] ?? "";
 
-                    if (moviesList.Movies == null)
-                        moviesList.Movies = new List<Movie>();
+                moviesList.search_key = search;
+                moviesList.sort_type = sort;
+                moviesList.Movies = new List<Movie>();
 
-                }
-                catch (Exception e)
+                if (ModelState.IsValidField("general"))
                 {
-                    ModelState.AddModelError("general", "Unknown database error occurred.");
+                    try
+                    {
+                        init?.Wait();
+                        moviesList.Movies = movies_table?
+                                .Where(x => x.GetType().GetFields().Any(y => x.GetType().GetField(y.Name).GetValue(x)?.ToString().ToLowerInvariant().Contains(search) ?? false))
+                                .OrderByDescending(x =>
+                                {
+                                    return x.GetType().GetField(sort)?.GetValue(x);
+                                });
+
+                        if (moviesList.Movies == null)
+                            moviesList.Movies = new List<Movie>();
+
+                    }
+                    catch (Exception e)
+                    {
+                        ModelState.AddModelError("general", "Unknown database error occurred.");
+                    }
                 }
-            }
-            return View(moviesList);
-        }
+
+                return View(moviesList);
+            });
+        } 
 
         // GET: MovieList/Details/5
-        public ActionResult Details(int? id)
+        public async Task<ActionResult> Details(int? id)
         {
-            if (id == null)
+            return await Task.Run(() =>
             {
-                ModelState.AddModelError("general", "Movie key not found!");
-                return RedirectToAction("Index");
-            }
+                if (id == null)
+                {
+                    ModelState.AddModelError("general", "Movie key not found!");
+                    return (ActionResult)RedirectToAction("Index");
+                }
 
-            if (!ModelState.IsValidField("general"))
-            {
-                return View(id);
-            }
-            Movie obj = movieDB.Movies.Table.SingleOrDefault(row => row.key == id);
+                if (!ModelState.IsValidField("general"))
+                {
+                    return View(id);
+                }
 
-            if (obj == null)
-            {
-                ModelState.AddModelError("general", "Movie key not found!");
-                return RedirectToAction("Index");
-            }
+                init?.Wait();
+                Movie obj = movieDB.Movies.Table.SingleOrDefault(row => row.key == id);
 
-            return View(obj);
+                if (obj == null)
+                {
+                    ModelState.AddModelError("general", "Movie key not found!");
+                    return RedirectToAction("Index");
+                }
+
+                return View(obj);
+            });
         }
 
         // GET: MovieList/Create
-        public ActionResult Create()
+        public async Task<ActionResult> Create()
         {
-            return View();
+            return await Task.Run(() => { return View(); });
         }
 
         // POST: MovieList/Create
         [HttpPost]
-        public ActionResult Create(FormCollection collection, HttpPostedFileBase image_file)
+        public async Task<ActionResult> Create(FormCollection collection, HttpPostedFileBase image_file)
         {
-            try
-            {
-                Movie newrow = new Movie() {
-                    Name= collection["Name"],
-                    Description= collection["Description"]};
 
-                byte[] image = new byte[image_file.InputStream.Length];
-                image_file.InputStream.Read(image, 0, (int)image_file.InputStream.Length);
-                newrow.Image = Convert.ToBase64String(image);
-
-                movieDB.Movies.Add<Movie>(newrow,"key");
-                movieDB.Commit();
-
-                return RedirectToAction("Index");
-            }
-            catch (JSONDB.JSONDBException e)
+            return await Task.Run(() =>
             {
-                ModelState.AddModelError("general", "Database deadlock timeout error. Please try again.");
-                return View();
-            }
-            catch (Exception e)
-            {
-                ModelState.AddModelError("general", "Unknown database error occurred.");
-                return View();
-            }
+                try
+                {
+                    Movie newrow = new Movie()
+                    {
+                        Name = collection["Name"],
+                        Description = collection["Description"]
+                    };
+
+                    byte[] image = new byte[image_file.InputStream.Length];
+                    image_file.InputStream.Read(image, 0, (int)image_file.InputStream.Length);
+                    newrow.Image = Convert.ToBase64String(image);
+
+                    init?.Wait();
+                    movieDB.Movies.Add<Movie>(newrow, "key");
+                    movieDB.Commit();
+
+                    return (ActionResult)RedirectToAction("Index");
+                }
+                catch (JSONDB.JSONDBException e)
+                {
+                    ModelState.AddModelError("general", "Database deadlock timeout error. Please try again.");
+                    return View();
+                }
+                catch (Exception e)
+                {
+                    ModelState.AddModelError("general", "Unknown database error occurred.");
+                    return View();
+                }
+            });
         }
 
         // GET: MovieList/Edit/5
-        public ActionResult Edit(int? id)
+        public async Task<ActionResult> Edit(int? id)
         {
-            if (id == null)
-            {
-                ModelState.AddModelError("general", "Movie key not found!");
-                return RedirectToAction("Index");
-            }
 
-            if (!ModelState.IsValidField("general"))
+            return await Task.Run(() =>
             {
-                return View(id);
-            }
-            Movie obj = movies_table.SingleOrDefault(row => row.key == id);
+                if (id == null)
+                {
+                    ModelState.AddModelError("general", "Movie key not found!");
+                    return (ActionResult)RedirectToAction("Index");
+                }
 
-            if (obj == null)
-            {
-                ModelState.AddModelError("general", "Movie key not found!");
-                return RedirectToAction("Index");
-            }
+                if (!ModelState.IsValidField("general"))
+                {
+                    return View(id);
+                }
 
-            return View(obj);
+                init?.Wait();
+                Movie obj = movies_table.SingleOrDefault(row => row.key == id);
+
+                if (obj == null)
+                {
+                    ModelState.AddModelError("general", "Movie key not found!");
+                    return RedirectToAction("Index");
+                }
+
+                return View(obj);
+            });
         }
 
         // POST: MovieList/Edit/5
         [HttpPost]
-        public ActionResult Edit(int id, FormCollection collection, HttpPostedFileBase image_file)
+        public async Task<ActionResult> Edit(int id, FormCollection collection, HttpPostedFileBase image_file)
         {
-            try
-            {                Movie obj = movieDB.Movies.Table.Single(row => row.key == id);
-                obj.Name = collection["Name"];
-                obj.Description = collection["Description"];
 
-                if (image_file != null)
+            return await Task.Run(() =>
+            {
+                try
                 {
-                    byte[] image = new byte[image_file.InputStream.Length];
-                    image_file.InputStream.Read(image, 0, (int)image_file.InputStream.Length);
-                    obj.Image = Convert.ToBase64String(image);
+                    Movie obj = movieDB.Movies.Table.Single(row => row.key == id);
+                    obj.Name = collection["Name"];
+                    obj.Description = collection["Description"];
+
+                    if (image_file != null)
+                    {
+                        byte[] image = new byte[image_file.InputStream.Length];
+                        image_file.InputStream.Read(image, 0, (int)image_file.InputStream.Length);
+                        obj.Image = Convert.ToBase64String(image);
+                    }
+
+                    init?.Wait();
+                    movieDB.Movies.Edit("key", obj);
+                    movieDB.Commit();
+
+                    return (ActionResult)RedirectToAction("Index");
                 }
-
-                movieDB.Movies.Edit("key", obj);
-                movieDB.Commit();
-
-                return RedirectToAction("Index");
-            }
-            catch (JSONDB.JSONDBException e)
-            {
-                ModelState.AddModelError("general", "Database deadlock timeout error. Please try again.");
-                return View();
-            }
-            catch (Exception e)
-            {
-                ModelState.AddModelError("general", "Unknown database error occurred.");
-                return View();
-            }
+                catch (JSONDB.JSONDBException e)
+                {
+                    ModelState.AddModelError("general", "Database deadlock timeout error. Please try again.");
+                    return View();
+                }
+                catch (Exception e)
+                {
+                    ModelState.AddModelError("general", "Unknown database error occurred.");
+                    return View();
+                }
+            });
         }
 
         // GET: MovieList/Delete/5
-        public ActionResult Delete(int? id)
+        public async Task<ActionResult> Delete(int? id)
         {
-            if (id == null)
-            {
-                ModelState.AddModelError("general", "Movie key not found!");
-                return RedirectToAction("Index");
-            }
 
-            if (!ModelState.IsValidField("general"))
+            return await Task.Run(() =>
             {
-                return View(id);
-            }
-            Movie obj = movies_table.SingleOrDefault(row => row.key == id);
+                if (id == null)
+                {
+                    ModelState.AddModelError("general", "Movie key not found!");
+                    return (ActionResult)RedirectToAction("Index");
+                }
 
-            if (obj == null)
-            {
-                ModelState.AddModelError("general", "Movie key not found!");
-                return RedirectToAction("Index");
-            }
+                if (!ModelState.IsValidField("general"))
+                {
+                    return View(id);
+                }
 
-            return View(obj);
+                init?.Wait();
+                Movie obj = movies_table.SingleOrDefault(row => row.key == id);
+
+                if (obj == null)
+                {
+                    ModelState.AddModelError("general", "Movie key not found!");
+                    return RedirectToAction("Index");
+                }
+
+                return View(obj);
+            });
         }
 
         // POST: MovieList/Delete/5
         [HttpPost]
-        public ActionResult Delete(int id, FormCollection collection)
+        public async Task<ActionResult> Delete(int id, FormCollection collection)
         {
-            try
+            return await Task.Run(() =>
             {
-                movieDB.Movies.Delete("key",movies_table.Single(row => row.key == id));
+                try
+                {
 
-                movieDB.Commit();
+                    init?.Wait();
+                    movieDB.Movies.Delete("key", movies_table.Single(row => row.key == id));
 
-                return RedirectToAction("Index");
-            }
-            catch (JSONDB.JSONDBException e)
-            {
-                ModelState.AddModelError("general", e.Message);
-                return View();
-            }
-            catch (Exception e)
-            {
-                ModelState.AddModelError("general", "Unknown database error occurred.");
-                return View();
-            }
+                    movieDB.Commit();
+
+                    return (ActionResult)RedirectToAction("Index");
+                }
+                catch (JSONDB.JSONDBException e)
+                {
+                    ModelState.AddModelError("general", e.Message);
+                    return View();
+                }
+                catch (Exception e)
+                {
+                    ModelState.AddModelError("general", "Unknown database error occurred.");
+                    return View();
+                }
+            });
         }
     }
 }
